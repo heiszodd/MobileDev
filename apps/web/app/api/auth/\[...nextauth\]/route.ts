@@ -26,7 +26,7 @@ const handler = NextAuth({
     },
   },
   pages: {
-    signIn: '/login',
+    signIn: '/auth/login',
   },
   theme: {
     colorScheme: 'dark',

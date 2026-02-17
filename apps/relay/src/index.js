@@ -1,6 +1,6 @@
 // apps/relay/src/index.js
 
-import WebSocket from 'ws'
+import { WebSocketServer } from 'ws'
 import http from 'http'
 import dotenv from 'dotenv'
 import { logger } from './logger.js'
@@ -13,7 +13,7 @@ const PORT = process.env.PORT || 3001
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '').split(',')
 
 const server = http.createServer()
-const wss = new WebSocket.Server({ server })
+const wss = new WebSocketServer({ server })
 
 const connections = new Map()
 
