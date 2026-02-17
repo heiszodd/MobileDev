@@ -41,7 +41,7 @@ NEXT_PUBLIC_RELAY_URL=ws://localhost:3001
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 ```
-
+.
 #### apps/relay/.env
 ```bash
 PORT=3001
