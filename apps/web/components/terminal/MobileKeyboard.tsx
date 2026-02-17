@@ -2,83 +2,71 @@
 
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState, useEffect } from 'react'
 
 interface MobileKeyboardProps {
-  onData: (data: string) => void
+  onKeyPress?: (key: string) => void
 }
 
-export function MobileKeyboard({ onData }: MobileKeyboardProps) {
-  const [isVisible, setIsVisible] = useState(false)
+const keyRows = [
+  [
+    { label: 'Tab', value: '\t' },
+    { label: 'Esc', value: '\x1b' },
+    { label: 'Ctrl+C', value: '\x03' },
+    { label: 'Ctrl+D', value: '\x04' },
+  ],
+  [
+    { label: '↑', value: '\x1b[A' },
+    { label: '↓', value: '\x1b[B' },
+    { label: '←', value: '\x1b[D' },
+    { label: '→', value: '\x1b[C' },
+  ],
+  [
+    { label: 'Ctrl+L', value: '\x0c' },
+    { label: 'Ctrl+Z', value: '\x1a' },
+    { label: '~', value: '~' },
+    { label: '|', value: '|' },
+  ],
+]
+
+export function MobileKeyboard({ onKeyPress }: MobileKeyboardProps) {
   const [keyboardHeight, setKeyboardHeight] = useState(0)
 
   useEffect(() => {
-    const handleVisualViewportChange = () => {
-      if (typeof window !== 'undefined' && window.visualViewport) {
-        const vh = window.visualViewport.height
+    const updateKeyboardHeight = () => {
+      if (typeof visualViewport !== 'undefined') {
         const screenHeight = window.innerHeight
-        const estimatedKeyboardHeight = screenHeight - vh
-        setKeyboardHeight(estimatedKeyboardHeight)
-        setIsVisible(estimatedKeyboardHeight > 100)
+        const viewportHeight = visualViewport?.height || window.innerHeight
+        setKeyboardHeight(Math.max(0, screenHeight - viewportHeight))
       }
     }
 
-    if (typeof window !== 'undefined' && window.visualViewport) {
-      window.visualViewport.addEventListener('resize', handleVisualViewportChange)
-      return () => {
-        window.visualViewport?.removeEventListener('resize', handleVisualViewportChange)
-      }
+    if (typeof visualViewport !== 'undefined') {
+      visualViewport?.addEventListener('resize', updateKeyboardHeight)
+      return () =>
+        visualViewport?.removeEventListener('resize', updateKeyboardHeight)
     }
   }, [])
 
-  const handleKeyPress = (e: React.PointerEvent<HTMLButtonElement>, key: string) => {
-    e.preventDefault()
-    onData(key)
-  }
-
-  const keys = [
-    [
-      { label: 'Tab', key: '\t' },
-      { label: 'Esc', key: '\x1b' },
-      { label: 'Ctrl+C', key: '\x03' },
-      { label: 'Ctrl+D', key: '\x04' },
-    ],
-    [
-      { label: 'Ctrl+Z', key: '\x1a' },
-      { label: 'Ctrl+L', key: '\x0c' },
-      { label: '↑', key: '\x1b[A' },
-      { label: '↓', key: '\x1b[B' },
-    ],
-    [
-      { label: '←', key: '\x1b[D' },
-      { label: '→', key: '\x1b[C' },
-      { label: 'Enter', key: '\r' },
-      { label: 'Space', key: ' ' },
-    ],
-  ]
-
-  if (!isVisible) {
-    return null
+  const handleKeyPress = (value: string) => {
+    onKeyPress?.(value)
   }
 
   return (
-    <div
-      className="bg-slate-800 border-t border-slate-700 p-2 max-h-40 overflow-y-auto"
-      style={{
-        paddingBottom: `${Math.max(keyboardHeight + 8, 8)}px`,
-      }}
-    >
-      <div className="space-y-2">
-        {keys.map((row, rowIndex) => (
-          <div key={rowIndex} className="flex gap-2">
-            {row.map((btn, btnIndex) => (
+    <div className="bg-slate-800 border-t border-slate-700">
+      <div className="flex flex-col gap-1 p-2 max-h-48 overflow-auto">
+        {keyRows.map((row, rowIdx) => (
+          <div key={rowIdx} className="flex gap-1">
+            {row.map((key) => (
               <button
-                key={`${rowIndex}-${btnIndex}`}
-                onPointerDown={(e) => handleKeyPress(e, btn.key)}
-                className="flex-1 min-h-[44px] min-w-[44px] bg-slate-700 hover:bg-slate-600 active:bg-slate-500 text-white text-sm font-medium rounded transition-colors"
-                type="button"
+                key={key.label}
+                onPointerDown={(e) => {
+                  e.preventDefault()
+                  handleKeyPress(key.value)
+                }}
+                className="flex-1 min-h-[44px] bg-slate-700 hover:bg-slate-600 active:bg-slate-500 text-slate-100 text-xs font-medium rounded transition-colors"
               >
-                {btn.label}
+                {key.label}
               </button>
             ))}
           </div>

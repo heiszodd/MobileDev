@@ -1,5 +1,3 @@
-// apps/web/middleware.ts
-
 import { withAuth } from 'next-auth/middleware'
 
 export const config = {
@@ -10,6 +8,8 @@ export const config = {
   ],
 }
 
-export default withAuth(function middleware(req) {
-  // Middleware code here (optional)
+export default withAuth({
+  pages: {
+    signIn: '/auth/login',
+  },
 })

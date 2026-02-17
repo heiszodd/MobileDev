@@ -8,9 +8,11 @@ const handler = NextAuth({
     GithubProvider({
       clientId: process.env.GITHUB_CLIENT_ID || '',
       clientSecret: process.env.GITHUB_CLIENT_SECRET || '',
-      allowDangerousEmailAccountLinking: true,
     }),
   ],
+  pages: {
+    signIn: '/auth/login',
+  },
   callbacks: {
     async jwt({ token, account }) {
       if (account) {
@@ -18,18 +20,10 @@ const handler = NextAuth({
       }
       return token
     },
-    async session({ session, token }) {
-      if (session.user) {
-        ;(session as any).accessToken = token.accessToken
-      }
+    async session({ session, token }: any) {
+      session.accessToken = token.accessToken
       return session
     },
-  },
-  pages: {
-    signIn: '/auth/login',
-  },
-  theme: {
-    colorScheme: 'dark',
   },
 })
 

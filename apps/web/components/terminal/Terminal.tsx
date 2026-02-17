@@ -3,11 +3,9 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import dynamic from 'next/dynamic'
 import { RelayClient } from '@/lib/relay'
-import { RelayMessage } from '@/types'
-
-const MobileKeyboard = dynamic(() => import('./MobileKeyboard').then(mod => ({ default: mod.MobileKeyboard })), { ssr: false })
+import { TerminalToolbar } from './TerminalToolbar'
+import { MobileKeyboard } from './MobileKeyboard'
 
 interface TerminalProps {
   codespaceId: string
@@ -16,138 +14,125 @@ interface TerminalProps {
 
 export function Terminal({ codespaceId, token }: TerminalProps) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const termRef = useRef<any>(null)
+  const [connected, setConnected] = useState(false)
+  const [reconnecting, setReconnecting] = useState(false)
+  const [output, setOutput] = useState<string[]>([])
   const relayRef = useRef<RelayClient | null>(null)
-  const [isConnected, setIsConnected] = useState(false)
-  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    let mounted = true
-
-    const setupTerminal = async () => {
+    const initRelay = async () => {
       try {
-        // Import xterm dynamically since it's browser-only
-        const { Terminal: XTerminal } = await import('xterm')
-        const { FitAddon } = await import('xterm-addon-fit')
-        await import('xterm/css/xterm.css')
+        const relayUrl = process.env.NEXT_PUBLIC_RELAY_URL
+        if (!relayUrl) {
+          console.error('NEXT_PUBLIC_RELAY_URL not set')
+          return
+        }
 
-        if (!mounted || !containerRef.current) return
-
-        // Create terminal instance
-        const term = new XTerminal({
-          cols: 80,
-          rows: 24,
-          theme: {
-            background: '#0f172a',
-            foreground: '#f1f5f9',
-          },
-          fontFamily: '"Fira Code", monospace',
-          fontSize: 14,
-        })
-
-        term.open(containerRef.current)
-        termRef.current = term
-
-        // Setup fit addon
-        const fitAddon = new FitAddon()
-        term.loadAddon(fitAddon)
-        fitAddon.fit()
-
-        // Setup relay connection
-        const relayUrl = process.env.NEXT_PUBLIC_RELAY_URL || 'ws://localhost:3001'
-        const relay = new RelayClient(
+        relayRef.current = new RelayClient(
           relayUrl,
           () => {
-            if (mounted) {
-              setIsConnected(true)
-              setIsLoading(false)
-            }
+            setConnected(true)
+            setReconnecting(false)
+            console.log('[Terminal] Connected to relay')
           },
           () => {
-            if (mounted) {
-              setIsConnected(false)
-              term.writeln('\r\n[Connection lost. Reconnecting...]')
-            }
+            setConnected(false)
+            setReconnecting(true)
+            console.log('[Terminal] Disconnected from relay')
           }
         )
 
-        // Setup message handlers
-        relay.on('output', (msg: RelayMessage) => {
+        await relayRef.current.connect()
+
+        relayRef.current.on('output', (msg) => {
           if (msg.data) {
-            term.write(msg.data)
+            setOutput((prev) => [...prev, msg.data])
           }
         })
 
-        relay.on('error', (msg: RelayMessage) => {
-          if (msg.message) {
-            term.writeln(`\r\n[Error: ${msg.message}]`)
-          }
+        relayRef.current.on('error', (msg) => {
+          console.error('[Terminal] Error:', msg.message)
+          setOutput((prev) => [...prev, `❌ Error: ${msg.message}\n`])
         })
 
-        // Handle user input
-        term.onData((data) => {
-          relay.send({ type: 'input', data })
+        // Connect to codespace
+        relayRef.current.send({
+          type: 'connect',
+          codespaceId,
+          token,
         })
-
-        // Handle resize
-        const handleResize = () => {
-          fitAddon.fit()
-          relay.send({
-            type: 'resize',
-            cols: term.cols,
-            rows: term.rows,
-          })
-        }
-
-        window.addEventListener('resize', handleResize)
-
-        // Connect relay
-        relayRef.current = relay
-        await relay.connect()
-        relay.send({ type: 'connect', codespaceId, token })
-
-        return () => {
-          window.removeEventListener('resize', handleResize)
-          relay.disconnect()
-          term.dispose()
-        }
       } catch (error) {
-        console.error('[Terminal] Setup error:', error)
-        if (mounted && containerRef.current) {
-          containerRef.current.innerHTML =
-            '<div class="text-red-500 p-4">Failed to initialize terminal</div>'
-        }
+        console.error('[Terminal] Failed to initialize relay:', error)
+        setOutput((prev) => [
+          ...prev,
+          `❌ Failed to connect: ${error instanceof Error ? error.message : 'Unknown error'}\n`,
+        ])
       }
     }
 
-    setupTerminal()
+    initRelay()
 
     return () => {
-      mounted = false
+      if (relayRef.current) {
+        relayRef.current.disconnect()
+      }
     }
   }, [codespaceId, token])
 
+  const handleSendInput = (data: string) => {
+    if (relayRef.current && relayRef.current.isConnected()) {
+      relayRef.current.send({ type: 'input', data })
+    }
+  }
+
+  const handleClear = () => {
+    setOutput([])
+  }
+
+  const handleCopy = () => {
+    const text = output.join('')
+    navigator.clipboard.writeText(text)
+  }
+
   return (
-    <div className="flex flex-col h-full bg-slate-950">
-      {isLoading && (
-        <div className="flex items-center justify-center h-full">
-          <p className="text-slate-400">Connecting to Codespace...</p>
-        </div>
-      )}
+    <div className="flex flex-col h-full bg-slate-950 text-slate-100 font-mono text-sm">
+      <TerminalToolbar onClear={handleClear} onCopy={handleCopy} />
 
       <div
         ref={containerRef}
-        className={`flex-1 overflow-hidden ${isLoading ? 'hidden' : ''}`}
-        style={{ minHeight: 0 }}
-      />
+        className="flex-1 overflow-auto p-4 whitespace-pre-wrap break-words"
+      >
+        {output.length === 0 ? (
+          <div className="text-slate-500">
+            {connected ? (
+              <div>
+                <p>✓ Connected to {codespaceId}</p>
+                <p>Ready for input...</p>
+              </div>
+            ) : reconnecting ? (
+              <div>
+                <p>⟳ Reconnecting...</p>
+                <p className="text-xs text-slate-600">
+                  If this persists, check that the relay server is running
+                </p>
+              </div>
+            ) : (
+              <div>
+                <p>⟳ Connecting...</p>
+                <p className="text-xs text-slate-600">
+                  Make sure the relay server is running on port 3001
+                </p>
+              </div>
+            )}
+          </div>
+        ) : (
+          output.map((line, i) => <span key={i}>{line}</span>)
+        )}
+      </div>
 
-      {termRef.current && <MobileKeyboard onData={(data) => termRef.current.write(data)} />}
-
-      {!isConnected && !isLoading && (
-        <div className="bg-red-900/20 border-t border-red-700 p-3 text-red-400 text-sm">
-          <p>Terminal disconnected. Attempting to reconnect...</p>
-        </div>
-      )}
+      <div className="border-t border-slate-800">
+        <MobileKeyboard onKeyPress={handleSendInput} />
+      </div>
     </div>
   )
 }
